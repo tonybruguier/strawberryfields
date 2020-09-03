@@ -42,11 +42,11 @@ def singleloop(r, alpha, phi, theta, copies, shift='end'):
     theta....list of homodyne-measurement angles in rad
     """
 
-    prog = tdmprogram.TDMProgram(N=3)
+    prog = tdmprogram.TDMProgram(N=2)
     with prog.context(alpha, phi, theta, copies=copies, shift=shift) as (p, q):
-        ops.Sgate(r, 0) | q[2]
-        ops.BSgate(p[0]) | (q[1], q[2])
-        ops.Rgate(p[1]) | q[2]
+        ops.Sgate(r, 0) | q[1]
+        ops.BSgate(p[0]) | (q[0], q[1])
+        ops.Rgate(p[1]) | q[1]
         ops.MeasureHomodyne(p[2]) | q[0]
     eng = sf.Engine("gaussian")
     result = eng.run(prog)
@@ -65,8 +65,8 @@ def test_epr_cloud():
     copies = 200
 
     # This will generate c EPRstates per copy. I chose c = 4 because it allows us to make 4 EPR pairs per copy that can each be measured in different basis permutations.
-    alpha = [0, np.pi / 4] * c
-    phi = [np.pi / 2, 0] * c
+    alpha = [np.pi / 4, 0] * c
+    phi = [0, np.pi / 2] * c
 
     # Measurement of 4 subsequent EPR states in XX, XP, PX, PP to investigate nearest-neighbour correlations in all basis permutations
     theta = [0, 0] + [0, np.pi / 2] + [np.pi / 2, 0] + [np.pi / 2, np.pi / 2]  #
@@ -107,7 +107,7 @@ def test_ghz_cloud():
 
     sq_r = 5
     copies = 10
-    vac_modes = 2 # number of vacuum modes in the initial setup
+    vac_modes = 1 # number of vacuum modes in the initial setup
 
     n = 20 # for an n-mode GHZ state
     c = 2 # number of n-mode GHZ states per copy
