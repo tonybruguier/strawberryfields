@@ -187,8 +187,8 @@ class BosonicBackend(BaseBosonic):
         self.circuit = BosonicModes()
         init_weights, init_means, init_covs = [[0] * nmodes for i in range(3)]
 
-        vac_means = np.zeros((1, 2), dtype=float)  # .tolist()
-        vac_covs = np.array([[[0.5, 0], [0, 0.5]]])  # .tolist()
+        vac_means = np.zeros((1, 2), dtype=complex)  # .tolist()
+        vac_covs = np.array([0.5 * self.circuit.hbar * np.identity(2)])
 
         # List of modes that have been traversed through
         reg_list = []
@@ -308,8 +308,7 @@ class BosonicBackend(BaseBosonic):
             return (
                 np.array([[1]], dtype=complex),
                 np.array([[0, 0]], dtype=complex),
-                np.array([[[0.5, 0], [0, 0.5]]]),
-            )
+                np.array([0.5 * self.circuit.hbar * np.identity(2)]),)
 
         norm = 1 / (2 * (1 + np.exp(-2 * np.absolute(alpha) ** 2) * np.cos(phi)))
         phi = np.pi * phi
@@ -333,18 +332,14 @@ class BosonicBackend(BaseBosonic):
             phase = np.angle(alpha)
             E = np.pi ** 2 * D * self.circuit.hbar / (16 * a ** 2)
             v = self.circuit.hbar / 2
-            num_mean = 8 * a / (np.pi * D * np.sqrt(2))
+            num_mean = 8 * a * np.sqrt(self.circuit.hbar) / (np.pi * D * np.sqrt(2))
             denom_mean = 16 * a ** 2 / (np.pi ** 2 * D) + 2
             coef_sigma = np.pi ** 2 * self.circuit.hbar / (8 * a ** 2 * (E + v))
             prefac = (
                 np.sqrt(np.pi * self.circuit.hbar)
                 * np.exp(0.25 * np.pi ** 2 * D)
                 / (4 * a)
-                / (
-                    np.sqrt(
-                        np.pi ** 2 * self.circuit.hbar * D / (16 * a ** 2) + self.circuit.hbar / 2
-                    )
-                )
+                / (np.sqrt(E + v))
             )
             z_max = int(
                 np.ceil(
@@ -389,13 +384,17 @@ class BosonicBackend(BaseBosonic):
             means = np.concatenate((means_real, means))
 
             # computing the covariance array
-            cov = np.array([[0.5, 0], [0, (E + v) / (E * v * self.circuit.hbar ** 2)]])
+            cov = np.array([[0.5 * self.circuit.hbar, 0], [0, (E * v) / (E + v)]])
             cov = np.repeat(cov[None, :], 4 * z_max + 1, axis=0)
-            cov_real = 0.5 * np.array([[[1, 0], [0, 1]], [[1, 0], [0, 1]]], dtype=float)
+            cov_real = (
+                0.5
+                * self.circuit.hbar
+                * np.array([[[1, 0], [0, 1]], [[1, 0], [0, 1]]], dtype=float)
+            )
             cov = np.concatenate((cov_real, cov))
 
             # filter out 0 components
-            filt = ~np.isclose(weights, 0)
+            filt = ~np.isclose(weights, 0, atol=cutoff)
             weights = weights[filt]
             means = means[filt]
             cov = cov[filt]
@@ -512,7 +511,8 @@ class BosonicBackend(BaseBosonic):
     def prepare_fock(self, n, r=0.0001):
         """ Prepares the arrays of weights, means and covs of a Fock state"""
         if 1 / r ** 2 < n:
-            raise ValueError("The parameter r**2={} is larger than n={}".format(r ** 2, n))
+            raise ValueError(
+                "The parameter 1 / r ** 2={} is smaller than n={}".format(1 / r ** 2, n))
         # A simple function to calculate the parity
         parity = lambda n: 1 if n % 2 == 0 else -1
         # All the means are zero

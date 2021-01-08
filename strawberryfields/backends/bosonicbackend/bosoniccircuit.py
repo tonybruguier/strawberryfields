@@ -358,23 +358,53 @@ class BosonicModes:
         """ Returns a function that evaluates the Q function of the given state """
         if modes is None:
             modes = list(range(self.nlen))
-
-        Q = self.qmat(modes)
-        Qi = np.linalg.inv(Q)
-        delta = self.mean[modes] - alpha
-
-        delta = np.concatenate((delta, np.conjugate(delta)))
-        return np.sqrt(np.linalg.det(Qi).real) * np.exp(
-            -0.5 * np.dot(delta, np.dot(Qi, np.conjugate(delta))).real
+        # Sort by (q1,p1,q2,p2,...)
+        mode_ind = np.sort(np.append(2 * np.array(modes), 2 * np.array(modes) + 1))
+        alpha_mean = np.array([])
+        for i in range(len(modes)):
+            alpha_mean = np.append(alpha_mean, alpha.real[i] * np.sqrt(2 * self.hbar))
+            alpha_mean = np.append(alpha_mean, alpha.imag[i] * np.sqrt(2 * self.hbar))
+        deltas = self.means[:, mode_ind] - alpha_mean
+        cov_sum = (
+            self.covs[:, mode_ind, :][:, :, mode_ind] + self.hbar * np.eye((len(mode_ind))) / 2
         )
+        exp_arg = np.einsum("...j,...jk,...k", deltas, np.linalg.inv(cov_sum), deltas)
+        weighted_exp = (
+            np.array(self.weights)
+            * self.hbar ** len(modes)
+            * np.exp(-0.5 * exp_arg)
+            / np.sqrt(np.linalg.det(cov_sum))
+        )
+        fidelity = np.sum(weighted_exp)
+        return fidelity
 
     def fidelity_vacuum(self, modes=None):
         """fidelity of the current state with the vacuum state"""
         if modes is None:
             modes = list(range(self.nlen))
-
         alpha = np.zeros(len(modes))
-        return self.fidelity_coherent(alpha)
+        fidelity = self.fidelity_coherent(alpha, modes=modes)
+        return fidelity
+
+    def parity_val(self, modes=None):
+        """Expectation value of the parity operator"""
+        if modes is None:
+            modes = list(range(self.nlen))
+        # Sort by (q1,p1,q2,p2,...)
+        mode_ind = np.sort(np.append(2 * np.array(modes), 2 * np.array(modes) + 1))
+        exp_arg = np.einsum(
+            "...j,...jk,...k",
+            self.means[:, mode_ind],
+            np.linalg.inv(self.covs[:, mode_ind, :][:, :, mode_ind]),
+            self.means[:, mode_ind],
+        )
+        weighted_exp = (
+            np.array(self.weights)
+            * np.exp(-0.5 * exp_arg)
+            / np.sqrt(np.linalg.det(self.covs[:, mode_ind, :][:, :, mode_ind]))
+        )
+        parity = np.sum(weighted_exp)
+        return parity
 
     def Amat(self):
         """ Constructs the A matrix from Hamilton's paper"""
@@ -450,7 +480,7 @@ class BosonicModes:
         nonneg_weights_ind = np.where(np.angle(self.weights) != np.pi)[0]
         ub_ind = np.union1d(imag_means_ind, nonneg_weights_ind)
         ub_weights = np.abs(np.array(self.weights))
-        if len(imag_means_ind) > 0:
+        if len(imag_means_ind):
             ub_weights[imag_means_ind] *= np.exp(
                 0.5
                 * np.einsum(
@@ -482,7 +512,7 @@ class BosonicModes:
                     (peak_sample - self.means[:, expind]),
                 )
                 ub_exp_arg = np.copy(exp_arg)
-                if len(imag_means_ind) > 0:
+                if len(imag_means_ind):
                     ub_exp_arg[imag_means_ind] = np.einsum(
                         "...j,...jk,...k",
                         (peak_sample - self.means[imag_means_ind, :][:, expind].real),
@@ -529,8 +559,6 @@ class BosonicModes:
                 if vertical_sample < prob_dist_val:
                     drawn = True
                     vals[i] = peak_sample
-                if drawn == True:
-                    break
         # The next line is a hack in that it only updates conditioned on the first samples value
         # should still work if shots = 1
         if len(indices) < len(self.active):
