@@ -636,6 +636,14 @@ class BosonicModes:
         self.post_select_generaldyne(covmat, indices, vals)
         return
 
+    def measure_fock(self, indices, cutoff):
+        """
+        Measures a list of modes
+        """
+        print("Do I get here ???")
+        print("cutoff = {}".format(cutoff))
+        return np.array([[0]])
+
     def apply_u(self, U):
         """ Transforms the state according to the linear optical unitary that maps a[i] \to U[i, j]^*a[j]"""
         Us = symp.interferometer(U)

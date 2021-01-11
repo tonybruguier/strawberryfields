@@ -1053,7 +1053,7 @@ class MeasureFock(Measurement):
 
     ns = None
 
-    def __init__(self, select=None, dark_counts=None):
+    def __init__(self, select=None, dark_counts=None, cutoff=None):
         if dark_counts and select:
             raise NotImplementedError("Post-selection cannot be used together with dark counts.")
 
@@ -1064,10 +1064,11 @@ class MeasureFock(Measurement):
             select = [select]
 
         self.dark_counts = dark_counts
+        self.cutoff = cutoff
         super().__init__([], select)
 
     def _apply(self, reg, backend, shots=1, **kwargs):
-        samples = backend.measure_fock(reg, shots=shots, select=self.select, **kwargs)
+        samples = backend.measure_fock(reg, cutoff=self.cutoff, shots=shots, select=self.select, **kwargs)
 
         if isinstance(samples, list):
             samples = np.array(samples)

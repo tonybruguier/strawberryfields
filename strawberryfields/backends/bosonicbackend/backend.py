@@ -661,34 +661,12 @@ class BosonicBackend(BaseBosonic):
     def thermal_loss(self, T, nbar, mode):
         self.circuit.thermal_loss(T, nbar, mode)
 
-    def measure_fock(self, modes, shots=1, select=None, **kwargs):
-        if select is not None:
-            raise NotImplementedError(
-                "Gaussian backend currently does not support " "postselection"
-            )
+    def measure_fock(self, modes, cutoff=None, shots=1, select=None, **kwargs):
         if shots != 1:
-            warnings.warn(
-                "Cannot simulate non-Gaussian states. "
-                "Conditional state after Fock measurement has not been updated."
+            raise NotImplementedError(
+                "bosonic backend currently does not support " "shots != 1 for Fock measurement"
             )
-
-        mu = self.circuit.mean
-        mean = self.circuit.smeanxp()
-        cov = self.circuit.scovmatxp()
-
-        x_idxs = np.array(modes)
-        p_idxs = x_idxs + len(mu)
-        modes_idxs = np.concatenate([x_idxs, p_idxs])
-        reduced_cov = cov[np.ix_(modes_idxs, modes_idxs)]
-        reduced_mean = mean[modes_idxs]
-
-        # check we are sampling from a gaussian state with zero mean
-        if np.allclose(mu, np.zeros_like(mu)):
-            samples = hafnian_sample_state(reduced_cov, shots)
-        else:
-            samples = hafnian_sample_state(reduced_cov, shots, mean=reduced_mean)
-
-        return samples
+        return self.circuit.measure_fock(modes, cutoff)
 
     def measure_threshold(self, modes, shots=1, select=None, **kwargs):
         if shots != 1:
