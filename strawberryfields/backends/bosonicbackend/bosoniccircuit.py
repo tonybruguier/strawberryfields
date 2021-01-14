@@ -583,34 +583,108 @@ class BosonicModes:
         covmat = self.hbar * np.eye(2) / 2
         return self.measure_dyne(covmat, [n], shots=shots)
 
-    def post_select_generaldyne(self, covmat, indices, vals):
-        """ Performs a generaldyne measurement but postelecting on the value vals for modes n """
-        if covmat.shape != (2 * len(indices), 2 * len(indices)):
+    def post_select_generaldyne(self, covmat, indices, vals, weights=None):
+        """ Performs a generaldyne measurement but postelecting on the value vals for modes indices """
+        if covmat.shape[-2:] != (2 * len(indices), 2 * len(indices)):
             raise ValueError("Covariance matrix size does not match indices provided")
 
         for i in indices:
             if self.active[i] is None:
                 raise ValueError("Cannot apply measurement, mode does not exist")
 
+        if len(covmat.shape) == 2:
+            covmat = np.array([covmat])
+
+        # print("vals = {}".format(vals))
+
         expind = np.concatenate((2 * np.array(indices), 2 * np.array(indices) + 1))
-        mp = self.scovmat()
-        (A, B, C) = ops.chop_in_blocks_multi(mp, expind)
-        V = A - B @ np.linalg.inv(C + covmat) @ B.transpose(0, 2, 1)
+        (A, B, C) = ops.chop_in_blocks_multi(self.covs, expind)
+        # V = A - B @ np.linalg.inv(C + covmat[0]) @ B.transpose(0, 2, 1)
+        # for mat in covmat[1:]:
+            # V = np.concatenate((V, A - B @ np.linalg.inv(C + mat) @ B.transpose(0, 2, 1)))
+        ### testing here
+        V = []
+        for mat in covmat:
+            V.append(A - B @ np.linalg.inv(C + mat) @ B.transpose(0, 2, 1))
+        V = np.concatenate(V)
+        # V = np.concatenate(V)
+        # print("V = {}".format(V))
+        print("V.shape = {}".format(V.shape))
+        # quit()
         self.covs = ops.reassemble_multi(V, expind)
 
-        r = self.smean()
-        (va, vc) = ops.chop_in_blocks_vector_multi(r, expind)
-        va = va + np.einsum("...ij,...j", B @ np.linalg.inv(C + covmat), (vals - vc))
-        self.means = ops.reassemble_vector_multi(va, expind)
+        (va, vc) = ops.chop_in_blocks_vector_multi(self.means, expind)
+        # print("vc = {}".format(vc))
+        # print("modif = {}".format(np.tile(vals[0], (vc.shape[0],1))))
+        # print("vals[0] - vc = {}".format((np.tile(vals[0], (vc.shape[0],1)) - vc).shape))
+        # print("(C + covmat[0]).shape = {}".format((C + covmat[0]).shape))
+        # print("B.shape = {}".format(B.shape))
+        # quit()
+        V = []
+        for i in range(covmat.shape[0]):
+            V.append(va + np.einsum("...ij,...j", B @ np.linalg.inv(C + covmat[i]), (np.tile(vals[i], (vc.shape[0],1)) - vc)))
+        V = np.concatenate(V)
+        print("V.shape = {}".format(V.shape))
+        # quit()
 
-        reweights_exp_arg = np.einsum(
-            "...j,...jk,...k", (vals - vc), np.linalg.inv(C + covmat), (vals - vc)
+        # V = va + np.einsum("...ij,...j", B @ np.linalg.inv(C + covmat[0]), (np.tile(vals[0], (vc.shape[0],1)) - vc))
+        # for i in range(1, covmat.shape[0]):
+            # V = np.concatenate((V, va + np.einsum("...ij,...j", B @ np.linalg.inv(C + covmat[i]), (np.tile(vals[i], (vc.shape[0],1)) - vc))))
+        self.means = ops.reassemble_vector_multi(V, expind)
+        V = []
+        for i in range(covmat.shape[0]):
+            V.append(np.einsum(
+            "...j,...jk,...k", (np.tile(vals[i], (vc.shape[0],1)) - vc), np.linalg.inv(C + covmat[i]), (np.tile(vals[i], (vc.shape[0],1)) - vc)))
+        reweights_exp_arg = np.concatenate(V)
+        # print("reweights_exp_arg.shape = {}".format(reweights_exp_arg.shape))
+        # quit()
+        # reweights_exp_arg = np.einsum(
+            # "...j,...jk,...k", (np.tile(vals[0], (vc.shape[0],1)) - vc), np.linalg.inv(C + covmat[0]), (np.tile(vals[0], (vc.shape[0],1)) - vc)
+        # )
+        # for i in range(1, covmat.shape[0]):
+            # reweights_exp_arg = np.concatenate((reweights_exp_arg, np.einsum(
+            # "...j,...jk,...k", (np.tile(vals[i], (vc.shape[0],1)) - vc), np.linalg.inv(C + covmat[i]), (np.tile(vals[i], (vc.shape[0],1)) - vc))))
+
+        print("reweights_exp_arg.shape = {}".format(reweights_exp_arg.shape))
+        print("self.weights.shape = {}".format(self.weights.shape))
+
+        # Creating weights array of appropriate shape
+        if weights is None:
+            meas_weights = np.ones_like(self.weights)
+        else:
+            V = []
+            for w in weights:
+                V.append(np.full_like(self.weights, w))
+            meas_weights = np.concatenate(V)
+            # meas_weights = np.full_like(self.weights, weights[0])
+            # for i in range(1, weights.shape[0]):
+                # meas_weights = np.concatenate((meas_weights, np.full_like(self.weights, weights[i])))
+
+        print("meas_weights.shape, reweights_exp_arg.shape = {}, {}".format(meas_weights.shape, reweights_exp_arg.shape))
+        print("self.covs.shape, self.means.shape = {}, {}".format(self.covs.shape, self.means.shape))
+        # quit()
+
+        # new_weights = self.weights
+        V = [self.weights]
+        if weights is not None:
+            for i in range(1, weights.shape[0]):
+                V.append(self.weights)
+                # new_weights = np.concatenate((new_weights, self.weights))
+        new_weights = np.concatenate(V)
+
+        # mat = C + covmat[0]
+        V = []
+        for mat in covmat:
+            V.append(C + mat)
+            # mat = np.concatenate((mat, C + covmat[i]))
+        mat = np.concatenate(V)
+
+        reweights = meas_weights * np.exp(-reweights_exp_arg) / (
+            (np.pi ** len(indices) / 2) * np.sqrt(np.linalg.det(mat))
         )
-        reweights = np.exp(-reweights_exp_arg) / (
-            (np.pi ** len(indices) / 2) * np.sqrt(np.linalg.det(C + covmat))
-        )
-        self.weights *= reweights
+        self.weights = new_weights * reweights
         self.weights /= np.sum(self.weights)
+        print("self.weights.shape = {}".format(self.weights.shape))
 
         return
 
@@ -636,13 +710,70 @@ class BosonicModes:
         self.post_select_generaldyne(covmat, indices, vals)
         return
 
-    def measure_fock(self, indices, cutoff):
+    def measure_fock(self, modes, select, cutoff, prepare_fock):
         """
         Measures a list of modes
         """
-        print("Do I get here ???")
-        print("cutoff = {}".format(cutoff))
-        return np.array([[0]])
+        def kron_list(l):
+            """Take Kronecker products of a list of lists."""
+            if len(l) == 1:
+                return l[0]
+            return np.kron(l[0], kron_list(l[1:]))
+
+        for mode in modes:
+            if self.active[mode] is None:
+                raise ValueError("Cannot appyly fock measurement, mode does not exist")
+
+        if select is not None:
+            if len(select) != len(modes):
+                raise ValueError(
+                    "When performing post-selection, the number of "
+                    "selected values (including None) must match the number of measured modes"
+                )
+
+            # make sure the select values are all integers or nones
+            if not all(isinstance(s, int) or s is None for s in select):
+                raise TypeError("The post-select list elements either be integers or None")
+
+            # modes to measure
+            measure = [i for i, s in zip(modes, select) if s is None]
+
+            # modes already post-selected:
+            selected = [i for i, s in zip(modes, select) if s is not None]
+            select_values = [s for s in select if s is not None]
+
+        # building the relevant modes
+        meas_w, meas_m, meas_cov = [], [], []
+        for value in select_values:
+            w, m, c = prepare_fock(value)
+            meas_w.append(w)
+            meas_m.append(m)
+            meas_cov.append(c)
+
+        # Find all possible combinations of means and combs of the
+        # Gaussians between the modes.
+        mean_combs = it.product(*meas_m)
+        cov_combs = it.product(*meas_cov)
+
+        weights = kron_list(meas_w)
+        means = np.array([[a for b in tup for a in b] for tup in mean_combs], dtype=complex)
+        covs = np.array([block_diag(*tup) for tup in cov_combs])
+
+        # covs_test = np.identity(2)
+        # means_test = np.array([[0, 0]])
+        # weights_test = None
+
+        self.post_select_generaldyne(covs, selected, means, weights)
+
+        # Computes the probability of measuring a given Fock state
+        w, m, c = prepare_fock(1)
+        print("shape(w, m, c) = {}, {}, {}".format(w.shape, m.shape, c.shape))
+        quit()
+        random_number = np.random.random()
+        n = 0
+        cum_prob = 0.
+
+        return np.array([[0, 0, 1, 2]])
 
     def apply_u(self, U):
         """ Transforms the state according to the linear optical unitary that maps a[i] \to U[i, j]^*a[j]"""

@@ -1053,7 +1053,7 @@ class MeasureFock(Measurement):
 
     ns = None
 
-    def __init__(self, select=None, dark_counts=None, cutoff=None):
+    def __init__(self, select=None, dark_counts=None, cutoff=10):
         if dark_counts and select:
             raise NotImplementedError("Post-selection cannot be used together with dark counts.")
 
@@ -1063,12 +1063,23 @@ class MeasureFock(Measurement):
         if select is not None and not isinstance(select, Sequence):
             select = [select]
 
+        if not isinstance(cutoff, int):
+            try:
+                cutoff = int(cutoff)
+            except:
+                raise ValueError("cutoff must be a positive integer.")
+        if cutoff < 0:
+            raise ValueError("cutoff must be positive.")
+
         self.dark_counts = dark_counts
         self.cutoff = cutoff
         super().__init__([], select)
 
     def _apply(self, reg, backend, shots=1, **kwargs):
-        samples = backend.measure_fock(reg, cutoff=self.cutoff, shots=shots, select=self.select, **kwargs)
+        if backend.short_name == "bosonic":
+            samples = backend.measure_fock(reg, shots=shots, select=self.select, cutoff=self.cutoff, **kwargs)
+        else :
+            samples = backend.measure_fock(reg, shots=shots, select=self.select, **kwargs)
 
         if isinstance(samples, list):
             samples = np.array(samples)

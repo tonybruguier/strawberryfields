@@ -119,14 +119,14 @@ class BosonicBackend(BaseBosonic):
                 except NotApplicableError:
                     # command is not applicable to the current backend type
                     raise NotApplicableError(
-                        "The operation {} cannot be used with {}.".format(cmd.op, self.backend)
+                        "The operation {} cannot be used with bosonic backend.".format(cmd.op)
                     ) from None
 
                 except NotImplementedError:
                     # command not directly supported by backend API
                     raise NotImplementedError(
-                        "The operation {} has not been implemented in {} for the arguments {}.".format(
-                            cmd.op, self.backend, kwargs
+                        "The operation {} has not been implemented in bosonic backend for the arguments {}.".format(
+                            cmd.op, kwargs
                         )
                     ) from None
             if type(cmd.op) not in (nongausspreps + ancilla_gates):
@@ -155,14 +155,14 @@ class BosonicBackend(BaseBosonic):
                 except NotApplicableError:
                     # command is not applicable to the current backend type
                     raise NotApplicableError(
-                        "The operation {} cannot be used with {}.".format(cmd.op, self.backend)
+                        "The operation {} cannot be used with bosonic backend.".format(cmd.op)
                     ) from None
 
                 except NotImplementedError:
                     # command not directly supported by backend API
                     raise NotImplementedError(
-                        "The operation {} has not been implemented in {} for the arguments {}.".format(
-                            cmd.op, self.backend, kwargs
+                        "The operation {} has not been implemented in bosonic backend for the arguments {}.".format(
+                            cmd.op, kwargs
                         )
                     ) from None
 
@@ -661,12 +661,8 @@ class BosonicBackend(BaseBosonic):
     def thermal_loss(self, T, nbar, mode):
         self.circuit.thermal_loss(T, nbar, mode)
 
-    def measure_fock(self, modes, cutoff=None, shots=1, select=None, **kwargs):
-        if shots != 1:
-            raise NotImplementedError(
-                "bosonic backend currently does not support " "shots != 1 for Fock measurement"
-            )
-        return self.circuit.measure_fock(modes, cutoff)
+    def measure_fock(self, modes, select=None, cutoff=10, **kwargs):
+        return self.circuit.measure_fock(modes, select, cutoff, self.prepare_fock)
 
     def measure_threshold(self, modes, shots=1, select=None, **kwargs):
         if shots != 1:
