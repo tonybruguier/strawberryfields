@@ -509,7 +509,7 @@ class BosonicBackend(BaseBosonic):
         else:
             raise ValueError("Only square GKP are implemented for now")
 
-    def prepare_fock(self, n, r=0.0001):
+    def prepare_fock(self, n, r=0.001):
         """ Prepares the arrays of weights, means and covs of a Fock state"""
         if 1 / r ** 2 < n:
             raise ValueError(
@@ -527,13 +527,13 @@ class BosonicBackend(BaseBosonic):
                 * (1 + (n - j) * r ** 2)
                 / (1 - (n - j) * r ** 2)
                 for j in range(n + 1)
-            ]
+            ], dtype=np.complex128
         )
         weights = np.array(
             [
                 (1 - n * (r ** 2)) / (1 - (n - j) * (r ** 2)) * comb(n, j) * parity(j)
                 for j in range(n + 1)
-            ]
+            ], dtype=np.complex128
         )
         weights = weights / np.sum(weights)
         return weights, means, covs

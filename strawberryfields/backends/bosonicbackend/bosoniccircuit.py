@@ -742,36 +742,58 @@ class BosonicModes:
             selected = [i for i, s in zip(modes, select) if s is not None]
             select_values = [s for s in select if s is not None]
 
-        # building the relevant modes
-        meas_w, meas_m, meas_cov = [], [], []
-        for value in select_values:
-            w, m, c = prepare_fock(value)
-            meas_w.append(w)
-            meas_m.append(m)
-            meas_cov.append(c)
+            # building the relevant modes
+            meas_w, meas_m, meas_cov = [], [], []
+            for value in select_values:
+                w, m, c = prepare_fock(value)
+                meas_w.append(w)
+                meas_m.append(m)
+                meas_cov.append(c)
 
-        # Find all possible combinations of means and combs of the
-        # Gaussians between the modes.
-        mean_combs = it.product(*meas_m)
-        cov_combs = it.product(*meas_cov)
+            # Find all possible combinations of means and combs of the
+            # Gaussians between the modes.
+            mean_combs = it.product(*meas_m)
+            cov_combs = it.product(*meas_cov)
 
-        weights = kron_list(meas_w)
-        means = np.array([[a for b in tup for a in b] for tup in mean_combs], dtype=complex)
-        covs = np.array([block_diag(*tup) for tup in cov_combs])
+            weights = kron_list(meas_w)
+            means = np.array([[a for b in tup for a in b] for tup in mean_combs], dtype=complex)
+            covs = np.array([block_diag(*tup) for tup in cov_combs])
 
-        # covs_test = np.identity(2)
-        # means_test = np.array([[0, 0]])
-        # weights_test = None
+            # covs_test = np.identity(2)
+            # means_test = np.array([[0, 0]])
+            # weights_test = None
 
-        self.post_select_generaldyne(covs, selected, means, weights)
+            self.post_select_generaldyne(covs, selected, means, weights)
 
-        # Computes the probability of measuring a given Fock state
-        w, m, c = prepare_fock(1)
-        print("shape(w, m, c) = {}, {}, {}".format(w.shape, m.shape, c.shape))
-        quit()
-        random_number = np.random.random()
-        n = 0
-        cum_prob = 0.
+        else:
+            measure = modes
+
+        # Sampling from a Fock state
+        for mode in measure:
+            n = 0
+            measured = False
+            random_number = np.random.random()
+            cumul_prob = 0.
+            while not measured:
+                w, m, c = prepare_fock(n)
+                expind = np.concatenate((2 * np.array([mode]), 2 * np.array([mode]) + 1))
+                _, _, A = ops.chop_in_blocks_multi(self.covs, expind)
+                _, va = ops.chop_in_blocks_vector_multi(self.means, expind)
+                indices = ((i,j) for i in range(c.shape[0]) for j in range(A.shape[0]))
+                sigma = np.empty((c.shape[0], A.shape[0], 2, 2),dtype=complex)
+                mu = np.empty((m.shape[0], va.shape[0], 2),dtype=complex)
+                for i, j in indices:
+                    mu[i,j,:] = va[j,:] - m[i,:]
+                    sigma[i,j,:,:] = c[i,:,:] + A[j,:,:]
+                exp = np.einsum("...j,...jk,...k", mu, np.linalg.inv(sigma), mu)
+                cumul_prob += self.hbar * np.einsum("...j,jk...,...k", w, np.exp( -0.5 * exp ) * np.sqrt(np.linalg.det( np.linalg.inv( sigma ) ) ), self.weights)
+                if cumul_prob > random_number:
+                    measured = True
+                    self.post_select_generaldyne(c, mode, m, w)
+                else:
+                    n += 1
+                print("prob = {}".format(prob))
+                quit()
 
         return np.array([[0, 0, 1, 2]])
 
