@@ -690,7 +690,7 @@ class BosonicModes:
             if self.active[mode] is None:
                 raise ValueError("Cannot appyly fock measurement, mode does not exist")
 
-        if select is not None:
+        if select is not None and select.count(None) != len(select):
             if len(select) != len(modes):
                 raise ValueError(
                     "When performing post-selection, the number of "
@@ -707,7 +707,10 @@ class BosonicModes:
             # modes already post-selected:
             selected = [i for i, s in zip(modes, select) if s is not None]
             select_values = [s for s in select if s is not None]
-
+            print("measure = {}".format(measure))
+            print("selected = {}".format(selected))
+            print("select_values = {}".format(select_values))
+            quit()
             # building the relevant modes
             meas_w, meas_m, meas_cov = [], [], []
             for value in select_values:
