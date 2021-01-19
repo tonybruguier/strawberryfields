@@ -509,12 +509,13 @@ class BosonicBackend(BaseBosonic):
         else:
             raise ValueError("Only square GKP are implemented for now")
 
-    def prepare_fock(self, n, r=0.001):
+    def prepare_fock(self, n, r=0.01):
         """ Prepares the arrays of weights, means and covs of a Fock state"""
         if 1 / r ** 2 < n:
             raise ValueError(
                 "The parameter 1 / r ** 2={} is smaller than n={}".format(1 / r ** 2, n)
             )
+        r *= np.pi
         # A simple function to calculate the parity
         parity = lambda n: 1 if n % 2 == 0 else -1
         # All the means are zero

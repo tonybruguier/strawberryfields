@@ -585,6 +585,7 @@ class BosonicModes:
 
     def post_select_generaldyne(self, covmat, indices, vals, weights=None):
         """ Performs a generaldyne measurement but postelecting on the value vals for modes indices """
+
         if covmat.shape[-2:] != (2 * len(indices), 2 * len(indices)):
             raise ValueError("Covariance matrix size does not match indices provided")
 
@@ -592,61 +593,40 @@ class BosonicModes:
             if self.active[i] is None:
                 raise ValueError("Cannot apply measurement, mode does not exist")
 
+        # If all modes are post-selected, simply replace the weights, means and covs
+        if len(self.means[0]) == 2*len(indices):
+            if weights is None:
+                self.weights = np.array([[0]], dtype=complex)
+            else:
+                self.weights = weights
+            self.means = vals
+            self.covs = covmat
+            return
+
         if len(covmat.shape) == 2:
             covmat = np.array([covmat])
 
-        # print("vals = {}".format(vals))
-
         expind = np.concatenate((2 * np.array(indices), 2 * np.array(indices) + 1))
         (A, B, C) = ops.chop_in_blocks_multi(self.covs, expind)
-        # V = A - B @ np.linalg.inv(C + covmat[0]) @ B.transpose(0, 2, 1)
-        # for mat in covmat[1:]:
-            # V = np.concatenate((V, A - B @ np.linalg.inv(C + mat) @ B.transpose(0, 2, 1)))
-        ### testing here
+
         V = []
         for mat in covmat:
             V.append(A - B @ np.linalg.inv(C + mat) @ B.transpose(0, 2, 1))
         V = np.concatenate(V)
-        # V = np.concatenate(V)
-        # print("V = {}".format(V))
-        print("V.shape = {}".format(V.shape))
-        # quit()
         self.covs = ops.reassemble_multi(V, expind)
 
         (va, vc) = ops.chop_in_blocks_vector_multi(self.means, expind)
-        # print("vc = {}".format(vc))
-        # print("modif = {}".format(np.tile(vals[0], (vc.shape[0],1))))
-        # print("vals[0] - vc = {}".format((np.tile(vals[0], (vc.shape[0],1)) - vc).shape))
-        # print("(C + covmat[0]).shape = {}".format((C + covmat[0]).shape))
-        # print("B.shape = {}".format(B.shape))
-        # quit()
+
         V = []
         for i in range(covmat.shape[0]):
             V.append(va + np.einsum("...ij,...j", B @ np.linalg.inv(C + covmat[i]), (np.tile(vals[i], (vc.shape[0],1)) - vc)))
         V = np.concatenate(V)
-        print("V.shape = {}".format(V.shape))
-        # quit()
-
-        # V = va + np.einsum("...ij,...j", B @ np.linalg.inv(C + covmat[0]), (np.tile(vals[0], (vc.shape[0],1)) - vc))
-        # for i in range(1, covmat.shape[0]):
-            # V = np.concatenate((V, va + np.einsum("...ij,...j", B @ np.linalg.inv(C + covmat[i]), (np.tile(vals[i], (vc.shape[0],1)) - vc))))
         self.means = ops.reassemble_vector_multi(V, expind)
         V = []
         for i in range(covmat.shape[0]):
             V.append(np.einsum(
             "...j,...jk,...k", (np.tile(vals[i], (vc.shape[0],1)) - vc), np.linalg.inv(C + covmat[i]), (np.tile(vals[i], (vc.shape[0],1)) - vc)))
         reweights_exp_arg = np.concatenate(V)
-        # print("reweights_exp_arg.shape = {}".format(reweights_exp_arg.shape))
-        # quit()
-        # reweights_exp_arg = np.einsum(
-            # "...j,...jk,...k", (np.tile(vals[0], (vc.shape[0],1)) - vc), np.linalg.inv(C + covmat[0]), (np.tile(vals[0], (vc.shape[0],1)) - vc)
-        # )
-        # for i in range(1, covmat.shape[0]):
-            # reweights_exp_arg = np.concatenate((reweights_exp_arg, np.einsum(
-            # "...j,...jk,...k", (np.tile(vals[i], (vc.shape[0],1)) - vc), np.linalg.inv(C + covmat[i]), (np.tile(vals[i], (vc.shape[0],1)) - vc))))
-
-        print("reweights_exp_arg.shape = {}".format(reweights_exp_arg.shape))
-        print("self.weights.shape = {}".format(self.weights.shape))
 
         # Creating weights array of appropriate shape
         if weights is None:
@@ -654,29 +634,18 @@ class BosonicModes:
         else:
             V = []
             for w in weights:
-                V.append(np.full_like(self.weights, w))
+                V.append(np.full_like(self.weights, w, dtype=complex))
             meas_weights = np.concatenate(V)
-            # meas_weights = np.full_like(self.weights, weights[0])
-            # for i in range(1, weights.shape[0]):
-                # meas_weights = np.concatenate((meas_weights, np.full_like(self.weights, weights[i])))
-
-        print("meas_weights.shape, reweights_exp_arg.shape = {}, {}".format(meas_weights.shape, reweights_exp_arg.shape))
-        print("self.covs.shape, self.means.shape = {}, {}".format(self.covs.shape, self.means.shape))
-        # quit()
 
         # new_weights = self.weights
         V = [self.weights]
         if weights is not None:
             for i in range(1, weights.shape[0]):
                 V.append(self.weights)
-                # new_weights = np.concatenate((new_weights, self.weights))
         new_weights = np.concatenate(V)
-
-        # mat = C + covmat[0]
         V = []
         for mat in covmat:
             V.append(C + mat)
-            # mat = np.concatenate((mat, C + covmat[i]))
         mat = np.concatenate(V)
 
         reweights = meas_weights * np.exp(-reweights_exp_arg) / (
@@ -684,9 +653,6 @@ class BosonicModes:
         )
         self.weights = new_weights * reweights
         self.weights /= np.sum(self.weights)
-        print("self.weights.shape = {}".format(self.weights.shape))
-
-        return
 
     def post_select_homodyne(self, n, val, eps=0.0002, phi=0):
         """ Performs a homodyne measurement but postelecting on the value vals for mode n """
@@ -759,21 +725,19 @@ class BosonicModes:
             means = np.array([[a for b in tup for a in b] for tup in mean_combs], dtype=complex)
             covs = np.array([block_diag(*tup) for tup in cov_combs])
 
-            # covs_test = np.identity(2)
-            # means_test = np.array([[0, 0]])
-            # weights_test = None
-
             self.post_select_generaldyne(covs, selected, means, weights)
 
         else:
             measure = modes
 
         # Sampling from a Fock state
+        vals = []
         for mode in measure:
             n = 0
             measured = False
             random_number = np.random.random()
             cumul_prob = 0.
+            prob = []
             while not measured:
                 w, m, c = prepare_fock(n)
                 expind = np.concatenate((2 * np.array([mode]), 2 * np.array([mode]) + 1))
@@ -786,16 +750,32 @@ class BosonicModes:
                     mu[i,j,:] = va[j,:] - m[i,:]
                     sigma[i,j,:,:] = c[i,:,:] + A[j,:,:]
                 exp = np.einsum("...j,...jk,...k", mu, np.linalg.inv(sigma), mu)
-                cumul_prob += self.hbar * np.einsum("...j,jk...,...k", w, np.exp( -0.5 * exp ) * np.sqrt(np.linalg.det( np.linalg.inv( sigma ) ) ), self.weights)
+                p = self.hbar * np.einsum("...j,jk...,...k", w, np.exp( -0.5 * exp ) * np.sqrt(np.linalg.det( np.linalg.inv( sigma ) ) ), self.weights).real
+                prob += [p]
+                cumul_prob += p
                 if cumul_prob > random_number:
                     measured = True
-                    self.post_select_generaldyne(c, mode, m, w)
+                    self.post_select_generaldyne(c, [mode], m, w)
+                    vals.append(n)
                 else:
                     n += 1
-                print("prob = {}".format(prob))
-                quit()
+                # if cutoff is reached, we just sample from Fock states up to cutoff
+                if n > cutoff:
+                    prob = np.array(prob)
+                    prob /= np.sum(prob)
+                    val = np.random.choice(np.arange(n), p=prob)
+                    vals.append(val)
+                    w, m, c = prepare_fock(val)
+                    self.post_select_generaldyne(c, [mode], m, w)
+                    measured = True
 
-        return np.array([[0, 0, 1, 2]])
+        # Putting results together
+        if select is None:
+            results = vals
+        else:
+            results = [s if s is not None else vals.pop(0) for s in select]
+
+        return np.array([results])
 
     def apply_u(self, U):
         """ Transforms the state according to the linear optical unitary that maps a[i] \to U[i, j]^*a[j]"""
