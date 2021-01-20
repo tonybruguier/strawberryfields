@@ -1661,7 +1661,29 @@ class BaseBosonicState(BaseState):
                 )
             )
 
-        return wigner
+        return np.real_if_close(wigner)
+
+    def marginal(self, mode, xvec, phi=0):
+        if not isinstance(mode, int):
+            raise ValueError("Please select one mode indexed by an integer.")
+
+        if mode > self._modes:
+            raise ValueError(
+                "The number of specified modes cannot " "be larger than the number of subsystems."
+            )
+
+        rot = _R(phi)
+        weights, mus, covs = self.reduced_bosonic([mode])
+        muphis = (rot.T @ mus.T).T
+        covphis = rot.T @ covs @ rot
+
+        marginal = 0
+        for i in range(len(weights)):
+            marginal += (weights[i] / (np.sqrt((2 * np.pi * covphis[i, 0, 0])))) * np.exp(
+                -0.5 * (xvec - muphis[i, 0]) ** 2 / covphis[i, 0, 0]
+            )
+
+        return np.real_if_close(marginal)
 
     def quad_expectation(self, mode, phi=0, **kwargs):
         # pylint: disable=unused-argument
