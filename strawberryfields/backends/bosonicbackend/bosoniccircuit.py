@@ -553,7 +553,11 @@ class BosonicModes:
         )
         self.weights *= reweights
         self.weights /= np.sum(self.weights)
-
+        
+        self.means = self.means[abs(self.weights)>0]
+        self.covs = self.covs[abs(self.weights)>0]
+        self.weights = self.weights[abs(self.weights)>0]
+        
         return
 
     def post_select_homodyne(self, n, val, eps=0.0002, phi=0):
