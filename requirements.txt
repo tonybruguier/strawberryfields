@@ -13,6 +13,6 @@ tensorboard==2.6.0
 thewalrus==0.18.0
 toml==0.10.2
 typing-extensions==3.7.4
-urllib3==1.25.8
+urllib3==1.26.5
 quantum-xir==0.1.1
 xanadu-cloud-client==0.1.1
